@@ -149,18 +149,25 @@ pub fn mulAddSd(a: *ubig, b: Digit, add_by: Digit) !void {
     }
 }
 
+pub fn pow(a: ubig, b: *const ubig) !ubig {
+    return switch (b.digits.items.len) {
+        0 => .fromDigits(a.arena.child_allocator, &.{1}),
+        1 => powSd(a, b.digits.items[0]),
+        else => error.ExpTooLarge,
+    };
+}
+
 pub fn powSd(_a: ubig, _b: Digit) !ubig {
     var a: ubig = _a;
     defer a.deinit();
 
     var b: Digit = _b;
 
-    var result: ubig = .init(a.arena.child_allocator);
+    var result: ubig = try .fromDigits(_a.arena.child_allocator, &.{1});
     errdefer result.deinit();
 
-    try result.digits.append(result.arena.allocator(), 1);
-
-    while (b > 0) {
+    var first: bool = true;
+    while (b > 0) : (first = false) {
         if (b % 2 != 0) {
             const new_result = try mul(&result, &a);
             result.deinit();
@@ -169,7 +176,7 @@ pub fn powSd(_a: ubig, _b: Digit) !ubig {
 
         b /= 2;
         const new_a = try mul(&a, &a);
-        a.deinit();
+        if (!first) a.deinit();
         a = new_a;
     }
 

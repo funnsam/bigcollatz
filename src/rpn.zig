@@ -45,15 +45,10 @@ pub fn rpn(allocator: std.mem.Allocator, src: []const u8) !ubig {
                     const b = stack.pop().?;
                     defer b.deinit();
 
-                    const b2 = switch (b.digits.items.len) {
-                        0 => 0,
-                        1 => b.digits.items[0],
-                        else => return error.ExpTooLarge,
-                    };
-
                     const a = stack.pop().?;
+                    defer a.deinit();
 
-                    const pow = try a.powSd(b2);
+                    const pow = try a.pow(&b);
                     try stack.append(allocator, pow);
                 },
                 else => return error.UnknownOperator,
