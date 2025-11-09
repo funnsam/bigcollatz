@@ -28,6 +28,48 @@ pub const ubig = struct {
         self.arena.deinit();
     }
 
+    pub fn isEven(self: *const Self) bool {
+        if (self.digits.items.len < 1) return true;
+
+        return self.digits.items[0] % 2 == 0;
+    }
+
+    pub fn ctz(self: *const Self) u64 {
+        if (self.digits.items.len < 1) return std.math.maxInt(u64);
+
+        var ret: u64 = 0;
+        for (self.digits.items) |i| {
+            if (i == 0) {
+                ret += bits;
+                continue;
+            }
+
+            return ret + @ctz(i);
+        }
+
+        return ret;
+    }
+
+    pub fn rsh(self: *Self, by: u64) void {
+        var carry: Digit = 0;
+
+        var i: usize = self.digits.items.len - 1;
+        while (i >= by / bits) : (i -= 1) {
+            const digit = self.digits.items[i];
+
+            self.digits.items[i - by / bits] = carry | (digit >> @intCast(by % bits));
+            carry = if (by % bits != 0) digit << @intCast(64 - by % bits) else 0;
+
+            if (i == 0) break;
+        }
+
+        self.digits.items.len = self.digits.items.len - by / bits;
+
+        if (self.digits.getLastOrNull()) |digit| {
+            if (digit == 0) self.digits.items.len -= 1;
+        }
+    }
+
     pub fn addSd(self: *Self, other: Digit) !void {
         return umath.addSd(self, other);
     }
@@ -64,6 +106,71 @@ pub const ubig = struct {
         return umath.powSd(self, other);
     }
 };
+
+test "ubig ctz" {
+    const allocator = std.testing.allocator;
+
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{6});
+        try std.testing.expectEqual(1, a.ctz());
+    }
+
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 0, 1 });
+        try std.testing.expectEqual(ubig.bits, a.ctz());
+    }
+
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 0, 6 });
+        try std.testing.expectEqual(ubig.bits + 1, a.ctz());
+    }
+}
+
+test "ubig rsh" {
+    const allocator = std.testing.allocator;
+
+    // 6 >> 1 = 3
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{6});
+        a.rsh(1);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{3}, a.digits.items);
+    }
+
+    // 10_base >> 1 = 1 << (bits - 1)
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 0, 1 });
+        a.rsh(1);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{1 << (ubig.bits - 1)}, a.digits.items);
+    }
+
+    // 100_base >> (bits + 1) = 1 << (bits - 1)
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 0, 0, 1 });
+        a.rsh(ubig.bits + 1);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{1 << (ubig.bits - 1)}, a.digits.items);
+    }
+}
 
 test "ubig add" {
     const allocator = std.testing.allocator;
