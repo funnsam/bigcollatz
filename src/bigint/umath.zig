@@ -6,6 +6,33 @@ const DoubleDigit = ubig.DoubleDigit;
 const bits = ubig.bits;
 const base = ubig.base;
 
+pub fn addSd(a: *ubig, b: Digit) !void {
+    var carry: Digit = b;
+
+    const result_size = a.digits.items.len + 1;
+    try a.ensureTotalCapacity(result_size);
+
+    const a_len = a.digits.items.len;
+    a.digits.items.len = result_size;
+
+    for (0..result_size - 1) |i| {
+        const ad = if (i < a_len) a.digits.items[i] else 0;
+
+        const r = add2Carry(ad, carry);
+        carry = r.c;
+
+        a.digits.items[i] = r.r;
+
+        if (carry == 0) break;
+    }
+
+    if (carry != 0) {
+        a.digits.items[result_size - 1] = carry;
+    } else {
+        a.digits.items.len -= 1;
+    }
+}
+
 pub fn add(a: *ubig, b: *const ubig) !void {
     var carry: Digit = 0;
 
@@ -154,6 +181,15 @@ const CarryOp = struct {
     r: Digit,
     c: Digit,
 };
+
+fn add2Carry(a: Digit, b: Digit) CarryOp {
+    const d = @addWithOverflow(a, b);
+
+    return .{
+        .r = d.@"0",
+        .c = @intCast(d.@"1"),
+    };
+}
 
 fn addCarry(a: Digit, b: Digit, c: Digit) CarryOp {
     const d = @addWithOverflow(a, b);

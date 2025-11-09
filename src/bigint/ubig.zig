@@ -28,6 +28,10 @@ pub const ubig = struct {
         self.arena.deinit();
     }
 
+    pub fn addSd(self: *Self, other: Digit) !void {
+        return umath.addSd(self, other);
+    }
+
     pub fn add(self: *Self, other: *const Self) !void {
         return umath.add(self, other);
     }
