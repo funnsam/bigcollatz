@@ -53,17 +53,25 @@ pub const ubig = struct {
     pub fn rsh(self: *Self, by: u64) void {
         var carry: Digit = 0;
 
-        var i: usize = self.digits.items.len - 1;
-        while (i >= by / bits) : (i -= 1) {
-            const digit = self.digits.items[i];
+        if (by % bits != 0) {
+            var i: usize = self.digits.items.len - 1;
+            while (i >= by / bits) : (i -= 1) {
+                const digit = self.digits.items[i];
 
-            self.digits.items[i - by / bits] = carry | (digit >> @intCast(by % bits));
-            carry = if (by % bits != 0) digit << @intCast(64 - by % bits) else 0;
+                self.digits.items[i] = carry | (digit >> @intCast(by % bits));
+                carry = if (by % bits != 0) digit << @intCast(64 - by % bits) else 0;
 
-            if (i == 0) break;
+                if (i == 0) break;
+            }
         }
 
-        self.digits.items.len = self.digits.items.len - by / bits;
+        if (by / bits != 0) {
+            for (by / bits..self.digits.items.len) |i| {
+                self.digits.items[i - by / bits] = self.digits.items[i];
+            }
+
+            self.digits.items.len = self.digits.items.len - by / bits;
+        }
 
         if (self.digits.getLastOrNull()) |digit| {
             if (digit == 0) self.digits.items.len -= 1;
@@ -160,7 +168,7 @@ test "ubig rsh" {
         try std.testing.expectEqualSlices(ubig.Digit, &.{1 << (ubig.bits - 1)}, a.digits.items);
     }
 
-    // 100_base >> (bits + 1) = 1 << (bits - 1)
+    // 100_base >> (bits + 1)
     {
         var a: ubig = .init(allocator);
         defer a.deinit();
@@ -169,6 +177,17 @@ test "ubig rsh" {
         a.rsh(ubig.bits + 1);
 
         try std.testing.expectEqualSlices(ubig.Digit, &.{1 << (ubig.bits - 1)}, a.digits.items);
+    }
+
+    // 130_base >> (bits + 1)
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 0, 3, 1 });
+        a.rsh(ubig.bits + 1);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{(1 << (ubig.bits - 1)) + 1}, a.digits.items);
     }
 }
 
