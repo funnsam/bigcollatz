@@ -41,6 +41,19 @@ pub const ubig = struct {
         return self.digits.items[0] % 2 == 0;
     }
 
+    pub fn singleBit(self: *const Self) ?u64 {
+        if (self.digits.items.len < 1) return null;
+
+        for (0..self.digits.items.len - 1) |i| {
+            if (self.digits.items[i] != 0) return null;
+        }
+
+        const last = self.digits.getLast();
+        if (@popCount(last) != 1) return null;
+
+        return @ctz(last) + (self.digits.items.len - 1) * bits;
+    }
+
     pub fn ctz(self: *const Self) u64 {
         if (self.digits.items.len < 1) return std.math.maxInt(u64);
 
@@ -144,6 +157,10 @@ pub const ubig = struct {
 
     pub fn mulSd(self: *Self, other: Digit) !void {
         return umath.mulSd(self, other);
+    }
+
+    pub fn mulAddCsd(self: *Self, other: Digit, add_by: Digit) !void {
+        return umath.mulAddSd(self, other, add_by);
     }
 
     pub fn mulAddSd(self: *Self, other: Digit, add_by: Digit) !void {
@@ -559,5 +576,16 @@ test "ubig pow sd" {
         defer pow.deinit();
 
         try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, 0, 0, 0, 0, 1 }, pow.digits.items);
+    }
+
+    // 2^10 = 1024
+    {
+        var a: ubig = try .fromDigits(allocator, &.{2});
+        defer a.deinit();
+
+        const pow = try a.powSd(10);
+        defer pow.deinit();
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{1024}, pow.digits.items);
     }
 }

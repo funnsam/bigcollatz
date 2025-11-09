@@ -159,14 +159,21 @@ pub fn pow(a: ubig, b: *const ubig) !ubig {
 
 pub fn powSd(_a: ubig, _b: Digit) !ubig {
     var a: ubig = _a;
-    defer a.deinit();
 
     var b: Digit = _b;
 
     var result: ubig = try .fromDigits(_a.arena.child_allocator, &.{1});
     errdefer result.deinit();
 
+    // a is a power of 2
+    if (a.singleBit()) |n| {
+        try result.lsh(n * b);
+        return result;
+    }
+
     var first: bool = true;
+    defer a.deinit();
+
     while (b > 0) : (first = false) {
         if (b % 2 != 0) {
             const new_result = try mul(&result, &a);
