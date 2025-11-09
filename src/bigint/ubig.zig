@@ -1,4 +1,5 @@
 const std = @import("std");
+const umath = @import("umath.zig");
 
 pub const ubig = struct {
     pub const Digit = usize;
@@ -23,110 +24,40 @@ pub const ubig = struct {
         try self.digits.ensureTotalCapacity(self.arena.allocator(), new_capacity);
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *const Self) void {
         self.arena.deinit();
     }
 
     pub fn add(self: *Self, other: *const Self) !void {
-        var carry: Digit = 0;
-
-        const result_size = @max(self.digits.items.len, other.digits.items.len) + 1;
-        try self.ensureTotalCapacity(result_size);
-
-        const self_len = self.digits.items.len;
-        self.digits.items.len = result_size;
-
-        for (0..result_size - 1) |i| {
-            const a = if (i < self_len) self.digits.items[i] else 0;
-            const b = if (i < other.digits.items.len) other.digits.items[i] else 0;
-
-            const r = addCarry(a, b, carry);
-            carry = r.c;
-
-            self.digits.items[i] = r.r;
-        }
-
-        if (carry != 0) {
-            self.digits.items[result_size - 1] = carry;
-        } else {
-            self.digits.items.len -= 1;
-        }
+        return umath.add(self, other);
     }
 
     pub fn subAssumeOrd(self: *Self, other: *const Self) !void {
-        var borrow: Digit = 0;
+        return umath.subAssumeOrd(self, other);
+    }
 
-        var final_len: usize = 0;
-        for (0..self.digits.items.len) |i| {
-            const a = self.digits.items[i];
-            const b = if (i < other.digits.items.len) other.digits.items[i] else 0;
+    pub fn mul(self: *const Self, other: *const Self) !Self {
+        return umath.mul(self, other);
+    }
 
-            const r = subBorrow(a, b, borrow);
-            self.digits.items[i] = r.r;
-            borrow = r.c;
+    pub fn addMul(self: *Self, a: *const Self, b: *const Self) !void {
+        return self.addMulNaive(a, b);
+    }
 
-            if (r.r != 0) final_len = i + 1;
-        }
-
-        self.digits.items.len = final_len;
+    pub fn addMulNaive(self: *Self, a: *const Self, b: *const Self) !void {
+        return umath.addMulNaive(self, a, b);
     }
 
     pub fn mulSd(self: *Self, other: Digit) !void {
-        var carry: Digit = 0;
-
-        const result_size = self.digits.items.len + 1;
-        try self.ensureTotalCapacity(result_size);
-
-        const self_len = self.digits.items.len;
-
-        for (0..self_len) |i| {
-            const a = self.digits.items[i];
-
-            const r = mulCarry(a, other, carry);
-            carry = r.c;
-
-            self.digits.items[i] = r.r;
-        }
-
-        if (carry != 0) {
-            self.digits.items.len += 1;
-            self.digits.items[self_len] = carry;
-        }
+        return umath.mulSd(self, other);
     }
 
-    const CarryOp = struct {
-        r: Digit,
-        c: Digit,
-    };
-
-    fn addCarry(a: Digit, b: Digit, c: Digit) CarryOp {
-        const d = @addWithOverflow(a, b);
-        const e = @addWithOverflow(d.@"0", c);
-
-        return .{
-            .r = e.@"0",
-            .c = @intCast(d.@"1" | e.@"1"),
-        };
+    pub fn mulAddSd(self: *Self, other: Digit, add_by: Digit) !void {
+        return umath.mulAddSd(self, other, add_by);
     }
 
-    fn subBorrow(a: Digit, b: Digit, c: Digit) CarryOp {
-        const d = @subWithOverflow(a, b);
-        const e = @subWithOverflow(d.@"0", c);
-
-        return .{
-            .r = e.@"0",
-            .c = @intCast(d.@"1" | e.@"1"),
-        };
-    }
-
-    fn mulCarry(a: Digit, b: Digit, c: Digit) CarryOp {
-        const d = @as(DoubleDigit, @intCast(a)) * @as(DoubleDigit, @intCast(b));
-        const e = @addWithOverflow(@as(Digit, @truncate(d)), c);
-
-        return .{
-            .r = e.@"0",
-            .c = @as(Digit, @truncate(d >> bits)) + @as(Digit, @intCast(e.@"1")),
-        };
+    pub fn powSd(self: Self, other: Digit) !Self {
+        return umath.powSd(self, other);
     }
 };
 
@@ -164,7 +95,7 @@ test "ubig add" {
 
         try a.add(&b);
 
-        try std.testing.expectEqualSlices(ubig.Digit, &.{0, 1}, a.digits.items);
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, 1 }, a.digits.items);
     }
 
     // 1 + max = 10_base
@@ -180,7 +111,7 @@ test "ubig add" {
 
         try a.add(&b);
 
-        try std.testing.expectEqualSlices(ubig.Digit, &.{0, 1}, a.digits.items);
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, 1 }, a.digits.items);
     }
 
     // 10_base + max * 10_base = 100_base
@@ -191,12 +122,12 @@ test "ubig add" {
         var b: ubig = .init(allocator);
         defer b.deinit();
 
-        try a.digits.appendSlice(a.arena.allocator(), &.{0, 1});
-        try b.digits.appendSlice(a.arena.allocator(), &.{0, max});
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 0, 1 });
+        try b.digits.appendSlice(a.arena.allocator(), &.{ 0, max });
 
         try a.add(&b);
 
-        try std.testing.expectEqualSlices(ubig.Digit, &.{0, 0, 1}, a.digits.items);
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, 0, 1 }, a.digits.items);
     }
 
     // 13_base + (max * 10_base + 5) = 108_base
@@ -207,12 +138,12 @@ test "ubig add" {
         var b: ubig = .init(allocator);
         defer b.deinit();
 
-        try a.digits.appendSlice(a.arena.allocator(), &.{3, 1});
-        try b.digits.appendSlice(a.arena.allocator(), &.{5, max});
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 3, 1 });
+        try b.digits.appendSlice(a.arena.allocator(), &.{ 5, max });
 
         try a.add(&b);
 
-        try std.testing.expectEqualSlices(ubig.Digit, &.{8, 0, 1}, a.digits.items);
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 8, 0, 1 }, a.digits.items);
     }
 
     // 33_base + (max * 10_base + 5) = 128_base
@@ -223,12 +154,12 @@ test "ubig add" {
         var b: ubig = .init(allocator);
         defer b.deinit();
 
-        try a.digits.appendSlice(a.arena.allocator(), &.{3, 3});
-        try b.digits.appendSlice(a.arena.allocator(), &.{5, max});
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 3, 3 });
+        try b.digits.appendSlice(a.arena.allocator(), &.{ 5, max });
 
         try a.add(&b);
 
-        try std.testing.expectEqualSlices(ubig.Digit, &.{8, 2, 1}, a.digits.items);
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 8, 2, 1 }, a.digits.items);
     }
 }
 
@@ -261,7 +192,7 @@ test "ubig sub" {
         var b: ubig = .init(allocator);
         defer b.deinit();
 
-        try a.digits.appendSlice(a.arena.allocator(), &.{0, 1});
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 0, 1 });
         try b.digits.appendSlice(a.arena.allocator(), &.{3});
 
         try a.subAssumeOrd(&b);
@@ -270,7 +201,7 @@ test "ubig sub" {
     }
 }
 
-test "ubig mul sd" {
+test "ubig mul add sd" {
     const allocator = std.testing.allocator;
 
     const max = ubig.base - 1;
@@ -287,7 +218,7 @@ test "ubig mul sd" {
         try std.testing.expectEqualSlices(ubig.Digit, &.{15}, a.digits.items);
     }
 
-    // max * 3 = 2 + (max - 2)
+    // max * 3 = 20_base + (max - 2)
     {
         var a: ubig = .init(allocator);
         defer a.deinit();
@@ -296,10 +227,10 @@ test "ubig mul sd" {
 
         try a.mulSd(3);
 
-        try std.testing.expectEqualSlices(ubig.Digit, &.{max - 2, 2}, a.digits.items);
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ max - 2, 2 }, a.digits.items);
     }
 
-    // 3 * max = 2 + (max - 2)
+    // 3 * max = 20_base + (max - 2)
     {
         var a: ubig = .init(allocator);
         defer a.deinit();
@@ -308,6 +239,179 @@ test "ubig mul sd" {
 
         try a.mulSd(max);
 
-        try std.testing.expectEqualSlices(ubig.Digit, &.{max - 2, 2}, a.digits.items);
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ max - 2, 2 }, a.digits.items);
+    }
+
+    // 5 * 3 + 2 = 17
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{5});
+
+        try a.mulAddSd(3, 2);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{17}, a.digits.items);
+    }
+
+    // max * 3 + 3 = 30_base
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{max});
+
+        try a.mulAddSd(3, 3);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, 3 }, a.digits.items);
+    }
+
+    // 3 * max + 3 = 30_base
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{3});
+
+        try a.mulAddSd(max, 3);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, 3 }, a.digits.items);
+    }
+
+    // max * max + max = max * base
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{max});
+
+        try a.mulAddSd(max, max);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, max }, a.digits.items);
+    }
+}
+
+test "ubig mul add" {
+    const allocator = std.testing.allocator;
+
+    const max = ubig.base - 1;
+
+    // 3 * 5 = 15
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        var b: ubig = .init(allocator);
+        defer b.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{3});
+        try b.digits.appendSlice(a.arena.allocator(), &.{5});
+
+        const mul = try a.mul(&b);
+        defer mul.deinit();
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{15}, mul.digits.items);
+    }
+
+    // 3 * max = 20_base + (max - 2)
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        var b: ubig = .init(allocator);
+        defer b.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{3});
+        try b.digits.appendSlice(a.arena.allocator(), &.{max});
+
+        const mul = try a.mul(&b);
+        defer mul.deinit();
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ max - 2, 2 }, mul.digits.items);
+    }
+
+    // max * 3 = 20_base + (max - 2)
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        var b: ubig = .init(allocator);
+        defer b.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{max});
+        try b.digits.appendSlice(a.arena.allocator(), &.{3});
+
+        const mul = try a.mul(&b);
+        defer mul.deinit();
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ max - 2, 2 }, mul.digits.items);
+    }
+
+    // max * max + max = max * base
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        var b: ubig = .init(allocator);
+        defer b.deinit();
+
+        var c: ubig = .init(allocator);
+        defer c.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{max});
+        try b.digits.appendSlice(a.arena.allocator(), &.{max});
+        try c.digits.appendSlice(a.arena.allocator(), &.{max});
+
+        try c.addMul(&a, &b);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, max }, c.digits.items);
+    }
+
+    // max(base) * max(base) + max(base^2) = max(base^3)
+    {
+        var a: ubig = .init(allocator);
+        defer a.deinit();
+
+        var b: ubig = .init(allocator);
+        defer b.deinit();
+
+        var c: ubig = .init(allocator);
+        defer c.deinit();
+
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 0, max });
+        try b.digits.appendSlice(a.arena.allocator(), &.{ 0, max });
+        try c.digits.appendSlice(a.arena.allocator(), &.{ 0, 0, max });
+
+        try c.addMul(&a, &b);
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, 0, 0, max }, c.digits.items);
+    }
+}
+
+test "ubig pow sd" {
+    const allocator = std.testing.allocator;
+
+    // const max = ubig.base - 1;
+
+    // 3^5 = 243
+    {
+        var a: ubig = .init(allocator);
+        try a.digits.appendSlice(a.arena.allocator(), &.{3});
+
+        const pow = try a.powSd(5);
+        defer pow.deinit();
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{243}, pow.digits.items);
+    }
+
+    // (10_base)^5 = 100000_base
+    {
+        var a: ubig = .init(allocator);
+        try a.digits.appendSlice(a.arena.allocator(), &.{ 0, 1 });
+
+        const pow = try a.powSd(5);
+        defer pow.deinit();
+
+        try std.testing.expectEqualSlices(ubig.Digit, &.{ 0, 0, 0, 0, 0, 1 }, pow.digits.items);
     }
 }
